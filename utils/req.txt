@@ -1,0 +1,11 @@
+pytorch-lightning
+torchmetrics
+torchinfo
+torchaudio
+pandas
+tqdm
+numpy
+mobilenet-pytorch
+sepconv
+amp
+soundfile

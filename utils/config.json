@@ -1,0 +1,30 @@
+{
+    "params": {
+        "seed": 42,
+        "num_mixes": 10,
+        "min_num_background_segments": 1,
+        "max_num_background_segments": 1,
+        "min_num_event_segments": 1,
+        "max_num_event_segments": 1,
+        "min_len_mixture": 10000,
+        "max_len_mixture": 10000,
+        "allow_same_class_background_overlap": false,
+        "max_foreground_overlaps": 2,
+        "allow_same_class_foreground_overlap": false,
+        "frame_rate": 16000,
+        "channel": 1    
+        },
+
+    "paths": {
+        "data_path": "audio_sources",
+        "dataset_path": "audio_sources/dataset",
+        "background_segments_path": "audio_sources/dataset/background",
+        "event_segments_path": "audio_sources/dataset/voices",
+        "output_path": "audio_sources/dataset_toy"
+        
+    },
+    
+    "class_mapping": {
+        "background": 1,
+        "event": -1}
+}

@@ -1,0 +1,18 @@
+{
+    "background_info": [
+        {
+            "Path": "audio_sources/dataset/background\\nash\\01_raspberrymic1-left_20250423_010041.wav",
+            "Class": "nash",
+            "Start": 0,
+            "End": 10000
+        }
+    ],
+    "event_info": [
+        {
+            "Path": "audio_sources/dataset/voices\\common\\common_voice_it_34955401.wav",
+            "Class": "common",
+            "Start": 5414,
+            "End": 9734
+        }
+    ]
+}
