@@ -1,8 +1,0 @@
-mixture,event,background
-audio_sources/dataset_toy\mix_0\mixture.wav,audio_sources/dataset_toy\mix_0\event.wav,audio_sources/dataset_toy\mix_0\background.wav
-audio_sources/dataset_toy\mix_7\mixture.wav,audio_sources/dataset_toy\mix_7\event.wav,audio_sources/dataset_toy\mix_7\background.wav
-audio_sources/dataset_toy\mix_2\mixture.wav,audio_sources/dataset_toy\mix_2\event.wav,audio_sources/dataset_toy\mix_2\background.wav
-audio_sources/dataset_toy\mix_9\mixture.wav,audio_sources/dataset_toy\mix_9\event.wav,audio_sources/dataset_toy\mix_9\background.wav
-audio_sources/dataset_toy\mix_4\mixture.wav,audio_sources/dataset_toy\mix_4\event.wav,audio_sources/dataset_toy\mix_4\background.wav
-audio_sources/dataset_toy\mix_3\mixture.wav,audio_sources/dataset_toy\mix_3\event.wav,audio_sources/dataset_toy\mix_3\background.wav
-audio_sources/dataset_toy\mix_6\mixture.wav,audio_sources/dataset_toy\mix_6\event.wav,audio_sources/dataset_toy\mix_6\background.wav
