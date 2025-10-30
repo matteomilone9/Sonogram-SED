@@ -397,19 +397,44 @@ class CNN_VAT_Anomaly_ADV(nn.Module):
         recon = self.decoder_fc(z)
         return original, recon, mu, logvar
 
+
+
+    ###=== Preprocessing con CNN ===###
+    # def preprocessing(self, x):
+    #     batch_size = x.size(0)
+    #     x = self.transform_tf(x)          # (B, F, T)
+    #     x = 10 * torch.log10(x + 1e-8)
+    #     x = torch.clamp((x + 80) / 80, 0.0, 1.0)
+    #     x = x.unsqueeze(1)                # (B, 1, F, T)
+
+    #     x = self.cnn_frontend(x)          # (B, C=64, F', T')
+    #     x = self.freq_pool(x)             # (B, 64, 8, T')
+    #     B, C, Fp, Tp = x.shape
+    #     x = x.view(B, C*Fp, Tp).permute(0, 2, 1)  # (B, T', feature_dim=512)
+    #     return x
+
+
     ###=== Preprocessing con CNN ===###
     def preprocessing(self, x):
         batch_size = x.size(0)
-        x = self.transform_tf(x)          # (B, F, T)
-        x = 10 * torch.log10(x + 1e-8)
-        x = torch.clamp((x + 80) / 80, 0.0, 1.0)
-        x = x.unsqueeze(1)                # (B, 1, F, T)
 
-        x = self.cnn_frontend(x)          # (B, C=64, F', T')
-        x = self.freq_pool(x)             # (B, 64, 8, T')
+        # 1️⃣ Spettrogramma lineare
+        x = self.transform_tf(x)  # (B, F, T)
+        # 2️⃣ Conversione in dB
+        x = 10 * torch.log10(x + 1e-8)  # evita log(0)
+        # 3️⃣ Aggiungiamo canale per CNN
+        x = x.unsqueeze(1)  # (B, 1, F, T)
+
+        # 4️⃣ CNN frontend
+        x = self.cnn_frontend(x)  # (B, C=64, F', T')
+        x = self.freq_pool(x)     # (B, 64, 8, T')
+
+        # 5️⃣ Rimodellamento per Transformer
         B, C, Fp, Tp = x.shape
         x = x.view(B, C*Fp, Tp).permute(0, 2, 1)  # (B, T', feature_dim=512)
+
         return x
+        
 
 ###=== Positional Encoding standard ===###
 class PositionalEncoding(nn.Module):
