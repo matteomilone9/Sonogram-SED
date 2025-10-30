@@ -10,8 +10,12 @@ import paramiko
 from datetime import datetime, timedelta
 
 from typing import List, Optional
-from architectures import VAT_Anomaly
+from arch_2 import VAT_Anomaly_Linear_ADV
+from arch_3 import VAT_Anomaly_CNN_ADV
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # =========================================================
 # === CONFIGURAZIONE REMOTA ===
@@ -20,32 +24,17 @@ REMOTE_HOST = "151.14.46.173"
 REMOTE_USER = "milone"
 SSH_PORT = 2200
 SSH_KEY = "lys-ai_keys/id_rsa"
-UUID = "8c69c0b3-ae12-4552-9b11-0aaa0304a06d"
-REMOTE_BASE = f"/mnt/BB-S_STORAGE/{UUID}/recordings"
+UUID_2 ="8c69c0b3-ae12-4552-9b11-0aaa0304a06d"
+REMOTE_BASE = f"/mnt/BB-S_STORAGE/{UUID_2}/recordings"
 
 
 # =========================================================
 # === PARAMETRI MODELLO ===
 # =========================================================
-sample_rate = 192000
-segment_duration = 1
-seg_len = sample_rate * segment_duration
-
-# === Lettura soglia dinamica ===
-#threshold_file = "pesi/threshold.txt"
-#try:
- #   with open(threshold_file, "r") as f:
-  #      threshold_line = f.readline().strip()
-   #     threshold = float(threshold_line)
-    #print(f"Soglia letta da '{threshold_file}': {threshold:.6f}")
-#except Exception as e:
- #   print(f"Errore nella lettura della soglia da {threshold_file}: {e}")
-  #  threshold = 0.01
-   # print(f"Usata soglia di default: {threshold:.6f}")
-
-threshold = 0.00176
-lower_bound = None
-upper_bound = threshold
+sample_rate = 192_000
+duration = 1
+seg_len = sample_rate * duration
+threshold = 0.000000001968
 
 
 # =========================================================
@@ -138,6 +127,7 @@ def analyze_day_full_ssh(giorno: str,
     """
     Analizza tutti i file audio (WAV/FLAC) di un giorno e device remoto,
     salvando solo le anomalie nel CSV remoto.
+    Se il CSV esiste già, riprende dal file successivo all'ultimo elaborato.
     """
     try:
         sftp, transport = _open_sftp()
@@ -147,10 +137,10 @@ def analyze_day_full_ssh(giorno: str,
 
     if tipo == "WAV":
         base_dir = f"{REMOTE_BASE}/{giorno}/device/{device_da_analizzare}"
-        out_dir = f"/mnt/BB-S_STORAGE/{UUID}/output/{giorno}/WAV/{device_da_analizzare}"
+        out_dir = f"/mnt/BB-S_STORAGE/{UUID_2}/output/{giorno}/WAV/{device_da_analizzare}"
     else:
         base_dir = f"{REMOTE_BASE}/{giorno}/FLAC/device/{device_da_analizzare}"
-        out_dir = f"/mnt/BB-S_STORAGE/{UUID}/output/{giorno}/FLAC/{device_da_analizzare}"
+        out_dir = f"/mnt/BB-S_STORAGE/{UUID_2}/output/{giorno}/FLAC/{device_da_analizzare}"
 
     out_csv = f"{out_dir}/{giorno}_{model_name}_{device_da_analizzare}_{tipo}_AI_alert.csv"
 
@@ -158,8 +148,10 @@ def analyze_day_full_ssh(giorno: str,
     print(f"👉 Cartella input: {base_dir}")
     print(f"👉 Output CSV: {out_csv}")
 
+    # 🔹 Crea cartella output se manca
     _ssh_exec(f"mkdir -p -m 2775 {shlex.quote(out_dir)}", check=False)
 
+    # 🔹 Lista file ordinati
     find_cmd = (
         f"test -d {shlex.quote(base_dir)} && "
         f"find {shlex.quote(base_dir)} -type f -iname '*.{tipo.lower()}' || true"
@@ -176,11 +168,23 @@ def analyze_day_full_ssh(giorno: str,
 
     print(f"[SSH] Trovati {len(files)} file in {base_dir}")
 
-    # === Crea CSV (o riprende) ===
+    # =====================================================
+    # === Resume: riprende dal primo file successivo a quello già processato
+    # =====================================================
+    last_processed = None
     try:
         sftp.stat(out_csv)
-        print(f"📂 CSV già esistente, appenderò nuove anomalie.")
+        print(f"📂 CSV già esistente, controllo ultimo file elaborato...")
+
+        with sftp.open(out_csv, "r") as remote_f:
+            with io.TextIOWrapper(remote_f, encoding="utf-8") as wrapper:
+                for row in wrapper:
+                    last_row = row.strip()
+                if last_row and not last_row.startswith(("modello", "path")):
+                    last_processed = last_row.split(",")[0]
+                    print(f"🔁 Ultimo file registrato nel CSV: {last_processed}")
     except FileNotFoundError:
+        # Se non esiste il CSV, crealo
         with sftp.open(out_csv, "w") as remote_f:
             with io.TextIOWrapper(remote_f, encoding="utf-8", newline="") as wrapper:
                 writer = csv.writer(wrapper)
@@ -190,7 +194,23 @@ def analyze_day_full_ssh(giorno: str,
         sftp.chmod(out_csv, 0o664)
         print(f"✅ Creato nuovo CSV con intestazione: {out_csv}")
 
-    # === Analisi batch ===
+    # 🔹 Se trovato ultimo file, salta tutti i precedenti
+    if last_processed and last_processed in files:
+        idx = files.index(last_processed)
+        files = files[idx + 1:]
+        print(f"⏩ Riparto dal file successivo ({len(files)} rimanenti).")
+    elif last_processed:
+        print(f"⚠️ Ultimo file {last_processed} non trovato nella lista. Analizzo tutto da capo.")
+
+    if not files:
+        print(f"✅ Tutti i file già analizzati. Nessun nuovo file da elaborare.")
+        sftp.close()
+        transport.close()
+        return
+
+    # =====================================================
+    # === Analisi in batch ===
+    # =====================================================
     for i in range(0, len(files), batch_size):
         batch = files[i:i + batch_size]
         print(f"👉 Analisi batch {i // batch_size + 1}: {len(batch)} file")
@@ -199,19 +219,16 @@ def analyze_day_full_ssh(giorno: str,
         for fpath in batch:
             try:
                 loss = analyze_remote_file_sftp(sftp, fpath, model)
-
                 if loss > threshold:
                     status = "Anomalo"
-                    print(f"  {os.path.basename(fpath)} → {status} (MSE: {loss:.6f})")
-                    rows.append([fpath, status, f"{loss:.6f}"])
+                    print(f"  {os.path.basename(fpath)} → {status} (MSE: {loss:.12f})")
+                    rows.append([fpath, status, f"{loss:.12f}"])
                 else:
-                    status = "Normale"
-                    print(f"  {os.path.basename(fpath)} → {status} (MSE: {loss:.6f})")
-
+                    print(f"  {os.path.basename(fpath)} → Normale (MSE: {loss:.12f})")
             except Exception as e:
                 print(f"  ❌ Errore su {fpath}: {e}")
 
-        # Scrivi solo anomalie
+        # 🔹 Scrive solo le anomalie trovate
         if rows:
             with sftp.open(out_csv, "a") as remote_f:
                 with io.TextIOWrapper(remote_f, encoding="utf-8", newline="") as wrapper:
@@ -224,6 +241,7 @@ def analyze_day_full_ssh(giorno: str,
     print("🏁 Analisi completata.")
 
 
+
 # =========================================================
 # === MAIN ===
 # =========================================================
@@ -231,14 +249,14 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Caricamento modello
-    model_path = "models_pth/192_vae_results_1s/192_best_vae_model_1s.pth"
-    model = VAT_Anomaly(sample_rate=192000, segment_duration=1)
+    model_path = "models_pth/CNN_NS_V2_192K_ADV/CNN_192K_best_vae_model_1s.pth"
+    model = VAT_Anomaly_CNN_ADV(sample_rate=sample_rate, segment_duration=duration)
     model.load_state_dict(torch.load(model_path, map_location=device))
-    model_name = "PROVA_192"
+    model_name = "TEST_NS_V2_CNN_LINEAR"
 
     # === Range DOY da analizzare ===
-    start_doy = "2025-286"   # Giorno iniziale
-    end_doy   = "2025-288"   # Giorno finale
+    start_doy = "2025-283"   # Giorno iniziale
+    end_doy   = "2025-284"   # Giorno finale
 
     # === Device da analizzare 
     devices = ["RSP2-MIC1"]

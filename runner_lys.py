@@ -11,6 +11,7 @@ import torch.nn.functional as F
 import torchaudio
 
 from architectures import VAT_Anomaly
+from arch_2 import VAT_Anomaly_Linear_ADV
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -23,24 +24,7 @@ sample_rate = 192000
 segment_duration = 1
 seg_len = sample_rate * segment_duration
 
-
-
-# Lettura soglia dal file
-#threshold_file = "pesi/threshold.txt"
-#try:
- #   with open(threshold_file, "r") as f:
-  #      threshold_line = f.readline().strip()
-   #     threshold = float(threshold_line)
-    #print(f"Soglia letta da '{threshold_file}': {threshold:.6f}")
-#except Exception as e:
- #   print(f"Errore nella lettura della soglia da {threshold_file}: {e}")
-  #  threshold = 0.01
-   # print(f"Usata soglia di default: {threshold:.6f}")
-
-# Tolerance: 10% della soglia di default, modificabile
-threshold = 0.0018
-tolerance = threshold * 0.1
-
+threshold = 0.00175
 
 # =========================================================
 # === FUNZIONI DI SUPPORTO ===
@@ -161,7 +145,26 @@ def analyze_all(urls, username, password, model, model_type, results_folder, mod
             giorno = "unknown"
 
         # Salvataggio CSV
-        csv_filename = os.path.join(results_folder, f"{model_type}_esito_{giorno}.csv")
+        # csv_filename = os.path.join(results_folder, f"{model_type}_esito_{giorno}.csv")
+
+        # Estrai anno_giorno (es. 2025-290) e device (es. RSP2-MIC1) dal path
+        try:
+            giorno = base_url.rsplit("/recordings/", 1)[1].split("/")[0]  # 2025-290
+            giorno_fmt = giorno.replace("-", "_")  # diventa 2025_290
+        except IndexError:
+            giorno_fmt = "unknown"
+
+        # Estrai il device (ultimo elemento dopo /device/)
+        try:
+            device_name = base_url.split("/device/")[1].split("/")[0]
+        except IndexError:
+            device_name = "unknown_device"
+
+        # Crea il nome dinamico del file CSV
+        csv_filename = os.path.join(
+            results_folder,
+            f"{giorno_fmt}_{model_name}_{device_name}.csv"
+        )
 
         def save_csv(csv_path, data):
             with open(csv_path, mode='w', newline='') as f:
@@ -200,23 +203,22 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Carica modello
-    model_path = "models_pth/192_vae_results_1s/192_best_vae_model_1s.pth"
-    model = VAT_Anomaly(sample_rate=192000)
+    model_path = "models_pth/NS_V2_192K_ADV/192K_best_vae_model_1s.pth"
+    model = VAT_Anomaly_Linear_ADV(sample_rate=192000)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model_type = '1s'
-    model_name = 'PROVA_192'
+    model_name = 'NS_V2_192K_ADV'
 
     # Lista cartelle audio da analizzare
     base_urls = [
-        "https://lys-ai.it/recordings/8c69c0b3-ae12-4552-9b11-0aaa0304a06d/recordings/2025-286/FLAC/device/RSP2-MIC1",
-        "https://lys-ai.it/recordings/8c69c0b3-ae12-4552-9b11-0aaa0304a06d/recordings/2025-287/FLAC/device/RSP2-MIC1"
-    ]
+        "https://lys-ai.it/recordings/8c69c0b3-ae12-4552-9b11-0aaa0304a06d/recordings/2025-292/FLAC/device/RSP2-MIC1",
+        ]
 
     username = "milone"
     password = "Neurone-pc"
 
     # Cartella di salvataggio
-    results_folder = "esiti/esiti_192"
+    results_folder = "esiti/esiti_NS_V2_192k_ADV"
 
     # Analizza tutti i file
     analyze_all(base_urls, username, password, model, model_type, results_folder, 
